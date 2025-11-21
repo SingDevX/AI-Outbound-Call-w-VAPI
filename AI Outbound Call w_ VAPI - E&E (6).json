@@ -1,0 +1,253 @@
+{
+  "name": "AI Outbound Call w/ VAPI - E&E",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "outbound-ai-call",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b7ae13fc-7350-4404-bec6-d3d44f0967b4",
+      "name": "Webhook",
+      "webhookId": "outbound-ai-call-webhook"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-1",
+              "name": "first_name",
+              "value": "={{ $json.body.first_name }}",
+              "type": "string"
+            },
+            {
+              "id": "field-2",
+              "name": "last_name",
+              "value": "={{ $json.body.last_name || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "field-3",
+              "name": "phone",
+              "value": "={{ $json.body.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "field-4",
+              "name": "email",
+              "value": "={{ $json.body.email || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ],
+      "id": "bd56ca09-b85a-45a8-885d-8c3856f60b41",
+      "name": "Extract Lead Data"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        464,
+        0
+      ],
+      "id": "f81cea02-0360-427c-87af-649019cf25ca",
+      "name": "Wait Before Slots",
+      "webhookId": "wait-webhook-1"
+    },
+    {
+      "parameters": {
+        "url": "=https://services.leadconnectorhq.com/calendars/x4HMpTaDe7tp8WrQWRr6/free-slots?startDate={{ $now.setZone('America/Los_Angeles').toMillis() }}&endDate={{ $now.plus(10, 'days').setZone('America/Los_Angeles').toMillis() }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Version",
+              "value": "2021-04-15"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        688,
+        0
+      ],
+      "id": "24134516-a534-4e0d-9762-48b98b9ca5f1",
+      "name": "Get Available Slots",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ooUlpePFbYXCFO9T",
+          "name": "GHL E&E Landscaping API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const allSlots = [];\nconst slotsByDate = {};\n\nfor (const item of items) {\n  const data = item.json;\n  \n  for (const dateStr in data) {\n    if (data[dateStr]?.slots && Array.isArray(data[dateStr].slots)) {\n      const date = new Date(dateStr);\n      const formattedDate = date.toLocaleDateString('en-US', { \n        weekday: 'long', \n        month: 'long', \n        day: 'numeric',\n        year: 'numeric',\n        timeZone: 'America/Los_Angeles'\n      });\n      \n      if (!slotsByDate[formattedDate]) {\n        slotsByDate[formattedDate] = [];\n      }\n      \n      data[dateStr].slots.forEach(slotISO => {\n        const slotDate = new Date(slotISO);\n        \n        // Extract hour and minutes in Pacific Time\n        const hour = parseInt(slotDate.toLocaleString('en-US', { \n          hour: 'numeric', \n          hour12: false,\n          timeZone: 'America/Los_Angeles' \n        }));\n        \n        const minutes = parseInt(slotDate.toLocaleString('en-US', { \n          minute: 'numeric',\n          timeZone: 'America/Los_Angeles'\n        }));\n        \n        // Convert to 12-hour format with AM/PM\n        const ampm = hour >= 12 ? 'PM' : 'AM';\n        const hour12 = hour % 12 || 12;\n        const minutesStr = minutes.toString().padStart(2, '0');\n        const formattedTime = `${hour12}:${minutesStr} ${ampm}`;\n        \n        slotsByDate[formattedDate].push(formattedTime);\n      });\n    }\n  }\n}\n\nlet slotsText = '';\nlet count = 0;\nfor (const date in slotsByDate) {\n  if (count < 3) {\n    slotsText += `On ${date}, we have: ${slotsByDate[date].join(', ')}. `;\n    count++;\n  }\n}\n\nconst customerData = $('Extract Lead Data').item.json;\n\nreturn [\n  {\n    json: {\n      available_slots: slotsText || 'No available slots in the next 10 days',\n      customer_name: `${customerData.first_name} ${customerData.last_name}`.trim(),\n      customer_phone: customerData.phone,\n      customer_email: customerData.email,\n      first_name: customerData.first_name\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        0
+      ],
+      "id": "e4e5f0fa-0570-45d1-a740-e49f05f992f8",
+      "name": "Format Slots for AI"
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "12effebe-1f73-4aa8-96c3-17e99f8f4b1d",
+      "name": "Wait Before Call",
+      "webhookId": "wait-webhook-2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/call/phone",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"phoneNumberId\": \"a4f3156c-b8d8-4f3e-906f-6bbf43586189\",\n  \"customer\": {\n    \"number\": \"{{ $json.customer_phone }}\"\n  },\n  \"assistantId\": \"d069c698-c184-4ed4-beb6-31d7cd067121\",\n  \"assistantOverrides\": {\n    \"variableValues\": {\n      \"customer_name\": \"{{ $json.first_name }}\",\n\"customer_phone\": \"{{ $json.customer_phone }}\",\n      \"available_slots\": \"{{ $json.available_slots }}\"\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "94072eb2-58a2-49d8-ae25-3c2193c6cf2c",
+      "name": "Make VAPI Call",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "hFCNKPY8mGQK8lo7",
+          "name": "VAPI Header Auth"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Lead Data": {
+      "main": [
+        [
+          {
+            "node": "Wait Before Slots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Slots": {
+      "main": [
+        [
+          {
+            "node": "Get Available Slots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Available Slots": {
+      "main": [
+        [
+          {
+            "node": "Format Slots for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Slots for AI": {
+      "main": [
+        [
+          {
+            "node": "Wait Before Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Call": {
+      "main": [
+        [
+          {
+            "node": "Make VAPI Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b2903435-c80c-4bb7-8e22-227889e08b1d",
+  "meta": {
+    "instanceId": "227e4f47a76aae6e15b20d362c537beffeb6fe532f4acc9237323d2df4812b14"
+  },
+  "id": "3vIO7DbjTEZGPDuB",
+  "tags": []
+}
